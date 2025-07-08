@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Robo Calling AI Agent{% endblock %}
+
+{% block header %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <!-- Statistics Cards -->
+    <div class="col-md-3">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Total Contacts</h6>
+                        <h3 class="mb-0">{{ contacts_summary.total_contacts or 0 }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-address-book fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Total Calls</h6>
+                        <h3 class="mb-0">{{ call_summary.total_calls or 0 }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-phone fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Successful Calls</h6>
+                        <h3 class="mb-0">{{ call_summary.status_counts.completed or 0 }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-check-circle fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card card-stat">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title text-muted">Failed Calls</h6>
+                        <h3 class="mb-0">{{ call_summary.status_counts.failed or 0 }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-times-circle fa-2x text-danger"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Quick Actions -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-bolt"></i> Quick Actions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="startCalling()">
+                        <i class="fas fa-play"></i> Start Calling Campaign
+                    </button>
+                    <button class="btn btn-warning" onclick="retryFailedCalls()">
+                        <i class="fas fa-redo"></i> Retry Failed Calls
+                    </button>
+                    <button class="btn btn-info" onclick="uploadContacts()">
+                        <i class="fas fa-upload"></i> Upload Contact List
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportData()">
+                        <i class="fas fa-download"></i> Export Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Call Status Summary -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-pie"></i> Call Status Summary
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if call_summary.status_counts %}
+                    {% for status, count in call_summary.status_counts.items() %}
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-capitalize">{{ status.replace('-', ' ') }}</span>
+                        <span class="badge bg-{% if status == 'completed' %}success{% elif status == 'failed' %}danger{% elif status == 'pending' %}warning{% else %}secondary{% endif %}">
+                            {{ count }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">No calls made yet.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <!-- Recent Calls -->
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-history"></i> Recent Activity
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="recentActivity">
+                    <p class="text-muted">Loading recent activity...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Modal -->
+<div class="modal fade" id="uploadModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Upload Contact List</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="contactFile" class="form-label">Select CSV or Excel file</label>
+                        <input type="file" class="form-control" id="contactFile" accept=".csv,.xlsx,.xls" required>
+                        <div class="form-text">Supported formats: CSV, Excel (.xlsx, .xls)</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitUpload()">Upload</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Calling Modal -->
+<div class="modal fade" id="callingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Start Calling Campaign</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="callingForm">
+                    <div class="mb-3">
+                        <label for="callScript" class="form-label">Call Script</label>
+                        <textarea class="form-control" id="callScript" rows="4" placeholder="Enter your call script here...">Hello, this is a test call from the Robo Calling AI Agent. Thank you for your time.</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="delaySeconds" class="form-label">Delay between calls (seconds)</label>
+                        <input type="number" class="form-control" id="delaySeconds" value="2" min="1" max="60">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitCalling()">Start Calling</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function uploadContacts() {
+    $('#uploadModal').modal('show');
+}
+
+function startCalling() {
+    $('#callingModal').modal('show');
+}
+
+function retryFailedCalls() {
+    if (confirm('Are you sure you want to retry all failed calls?')) {
+        $.post('/api/retry/failed', {}, function(data) {
+            if (data.success) {
+                alert('Retry scheduled for ' + data.retries_scheduled + ' calls');
+                location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        });
+    }
+}
+
+function exportData() {
+    window.location.href = '/api/reports/export';
+}
+
+function submitUpload() {
+    const formData = new FormData();
+    const fileInput = document.getElementById('contactFile');
+    
+    if (!fileInput.files[0]) {
+        alert('Please select a file');
+        return;
+    }
+    
+    formData.append('file', fileInput.files[0]);
+    
+    $.ajax({
+        url: '/api/contacts/upload',
+        type: 'POST',
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(data) {
+            if (data.success) {
+                alert('Successfully uploaded ' + data.contacts_added + ' contacts');
+                $('#uploadModal').modal('hide');
+                location.reload();
+            } else {
+                alert('Error: ' + data.message);
+            }
+        },
+        error: function() {
+            alert('Upload failed');
+        }
+    });
+}
+
+function submitCalling() {
+    // Get all active contacts
+    $.get('/api/contacts', function(data) {
+        if (data.contacts && data.contacts.length > 0) {
+            const contactIds = data.contacts.map(c => c.id);
+            const callScript = $('#callScript').val();
+            const delaySeconds = parseInt($('#delaySeconds').val());
+            
+            $.post('/api/calls/start', {
+                contact_ids: contactIds,
+                call_script: callScript,
+                delay_seconds: delaySeconds
+            }, function(result) {
+                if (result.success) {
+                    alert('Calling campaign started! ' + result.successful_calls + ' calls initiated.');
+                    $('#callingModal').modal('hide');
+                    location.reload();
+                } else {
+                    alert('Error: ' + result.message);
+                }
+            });
+        } else {
+            alert('No contacts available for calling');
+        }
+    });
+}
+
+// Load recent activity
+$(document).ready(function() {
+    $.get('/api/calls/history?limit=5', function(data) {
+        let html = '';
+        if (data && data.length > 0) {
+            data.forEach(function(call) {
+                const statusClass = call.status === 'completed' ? 'success' : 
+                                  call.status === 'failed' ? 'danger' : 'secondary';
+                html += `
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <strong>${call.phone_number}</strong>
+                            ${call.contact_name ? '(' + call.contact_name + ')' : ''}
+                        </div>
+                        <div>
+                            <span class="badge bg-${statusClass}">${call.status}</span>
+                            <small class="text-muted ms-2">${new Date(call.start_time).toLocaleString()}</small>
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            html = '<p class="text-muted">No recent calls.</p>';
+        }
+        $('#recentActivity').html(html);
+    });
+});
+</script>
+{% endblock %}
+
